@@ -32,6 +32,8 @@ This solution provides a way to control the working mode of FoxESS K series inve
    - `API_KEY = "your_api_key_here"` with your actual API key
    - `INVERTER_SN = "your_inverter_serial_number_here"` with your inverter's serial number
 
+**Note**: The script can be placed in either `/config/custom_components/foxess/` or `/homeassistant/custom_components/foxess/` depending on how you access your Home Assistant files. Both paths work identically.
+
 ## Finding Your Inverter Serial Number
 
 You can find your inverter's serial number in several ways:
@@ -66,19 +68,33 @@ python3 foxess_control.py peakshaving
 ### Working Modes
 
 - **SelfUse**: Prioritizes home energy consumption, uses battery when solar insufficient
-- **Backup**: Battery acts as backup power, minimal grid interaction
+- **Backup**: **Recommended for EV charging** - Battery acts as backup power, house draws from grid while solar charges battery, preventing battery discharge during charging
 - **Feedin**: Maximizes energy export to grid, uses all available solar
 - **PeakShaving**: Balances load during peak demand periods
 
 ## Home Assistant Integration
 
-### 1. Copy Files
+### 1. Place the Script
 
-Place the `foxess_control.py` script in your Home Assistant config directory (usually `/config/custom_components/foxess/`).
+Copy `foxess_control.py` to your Home Assistant config directory:
 
-### 2. Update configuration.yaml
+- **Via File Editor**: Place the file at `/config/custom_components/foxess/foxess_control.py`
+- **Via Samba/File Share**: Place the file at `/homeassistant/custom_components/foxess/foxess_control.py`
 
-Add the following to your `configuration.yaml`:
+Create the `foxess` directory if it doesn't exist. This keeps the control script alongside your existing FoxESS integration.
+
+### 2. Configure the Script
+
+Edit `foxess_control.py` and update these two lines at the top:
+
+```python
+API_KEY = "your_api_key_here"          # Replace with your FoxESS API key
+INVERTER_SN = "your_inverter_sn_here"   # Replace with your inverter serial number
+```
+
+### 3. Update configuration.yaml
+
+Add the following shell commands to your `configuration.yaml`:
 
 ```yaml
 shell_command:
@@ -86,37 +102,43 @@ shell_command:
   foxess_self_use: "python3 /config/custom_components/foxess/foxess_control.py selfuse"
   foxess_feedin: "python3 /config/custom_components/foxess/foxess_control.py feedin"
   foxess_get_mode: "python3 /config/custom_components/foxess/foxess_control.py get"
-
-automation:
-  - alias: "Backup mode when EV charging"
-    trigger:
-      - platform: state
-        entity_id: sensor.ohme_charger_status  # adjust to your entity
-        to: "charging"
-    action:
-      - service: shell_command.foxess_backup
-
-  - alias: "Return to SelfUse after EV charging"
-    trigger:
-      - platform: state
-        entity_id: sensor.ohme_charger_status
-        from: "charging"
-    action:
-      - service: shell_command.foxess_self_use
 ```
 
-### 3. Restart Home Assistant
+**Note**: Use `/config/` path if accessing via Home Assistant File Editor, or `/homeassistant/` if using Samba shares. Both point to the same location.
 
-Restart your Home Assistant instance to load the new configuration.
+### 4. Restart Home Assistant
+
+Restart your Home Assistant instance to load the new shell commands.
 
 ## Testing in Home Assistant
 
-### Using Developer Tools
+### 1. Test the Script Directly
 
-1. Go to **Developer Tools** in Home Assistant
-2. Click on the **Actions** tab
-3. In the **Service** dropdown, select `shell_command.foxess_get_mode`
-4. Click **Call Service**
+First, test the script works by running it directly. Use the Terminal add-on or SSH into Home Assistant:
+
+```bash
+# Navigate to the script location
+cd /config/custom_components/foxess
+
+# Test getting current mode
+python3 foxess_control.py get
+
+# Test setting backup mode
+python3 foxess_control.py backup
+
+# Test setting self-use mode
+python3 foxess_control.py selfuse
+```
+
+You should see JSON responses indicating success (errno: 0).
+
+### 2. Test Shell Commands
+
+Once the script works, test the shell commands through Home Assistant:
+
+1. Go to **Developer Tools** → **Actions** tab
+2. In the **Service** dropdown, select `shell_command.foxess_get_mode`
+3. Click **Call Service**
 
 The service should return the current working mode of your inverter. The response will be a JSON object containing the mode information, typically showing something like:
 
@@ -136,6 +158,31 @@ The service should return the current working mode of your inverter. The respons
 ```
 
 The current mode is indicated by the `value` field in the `result` object (possible values: "SelfUse", "Backup", "Feedin", "PeakShaving").
+
+### 3. Create Automations
+
+Once testing is successful, create your automations. Here's an example for EV charging coordination:
+
+```yaml
+automation:
+  - alias: "Backup mode when EV charging"
+    trigger:
+      - platform: state
+        entity_id: sensor.ohme_charger_status  # adjust to your Ohme entity
+        to: "charging"
+    action:
+      - service: shell_command.foxess_backup
+
+  - alias: "Return to SelfUse after EV charging"
+    trigger:
+      - platform: state
+        entity_id: sensor.ohme_charger_status
+        from: "charging"
+    action:
+      - service: shell_command.foxess_self_use
+```
+
+**Note**: Adjust the `entity_id` to match your Ohme charger's status sensor.
 
 ## API Details
 
