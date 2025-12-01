@@ -1,0 +1,53 @@
+
+# FoxESS Inverter Control Integration for Home Assistant
+# Place foxess_control.py in /config/custom_components/foxess/foxess_control.py
+# Adjust paths and entity IDs as needed for your setup
+
+shell_command:
+  # Get current working mode
+  foxess_get_mode: "python3 /config/custom_components/foxess/foxess_control.py get"
+
+  # Set working modes
+  foxess_self_use: "python3 /config/custom_components/foxess/foxess_control.py selfuse"
+  foxess_backup: "python3 /config/custom_components/foxess/foxess_control.py backup"
+  foxess_feedin: "python3 /config/custom_components/foxess/foxess_control.py feedin"
+  foxess_peakshaving: "python3 /config/custom_components/foxess/foxess_control.py peakshaving"
+
+automation:
+  # Example automation: Switch to backup mode when EV starts charging
+  - alias: "FoxESS: Backup mode when EV charging"
+    trigger:
+      - platform: state
+        entity_id: sensor.ohme_charger_status  # Replace with your EV charger status entity
+        to: "charging"
+    action:
+      - service: shell_command.foxess_backup
+
+  # Example automation: Return to self-use mode after EV stops charging
+  - alias: "FoxESS: Return to SelfUse after EV charging"
+    trigger:
+      - platform: state
+        entity_id: sensor.ohme_charger_status  # Replace with your EV charger status entity
+        from: "charging"
+    action:
+      - service: shell_command.foxess_self_use
+
+  # Example automation: Maximize export during peak solar hours
+  - alias: "FoxESS: Feed-in mode during peak sun hours"
+    trigger:
+      - platform: time
+        at: "12:00:00"
+    condition:
+      - condition: numeric_state
+        entity_id: sensor.solar_power  # Replace with your solar power sensor
+        above: 2000  # Adjust threshold as needed
+    action:
+      - service: shell_command.foxess_feedin
+
+  # Example automation: Return to self-use in evening
+  - alias: "FoxESS: Self-use mode in evening"
+    trigger:
+      - platform: time
+        at: "18:00:00"
+    action:
+      - service: shell_command.foxess_self_use
